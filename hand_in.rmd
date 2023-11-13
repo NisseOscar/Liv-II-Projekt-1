@@ -1,0 +1,101 @@
+---
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    session_info: TRUE
+    style: TRUE
+    comment: "#;-)"
+    tidyverse_quiet: FALSE
+    std_out_err: TRUE
+knit: reprex::reprex_render
+---
+
+## Init
+
+# Packages
+
+```{r, eval = requireNamespace("tidyverse", quietly = TRUE)}
+library(tidyverse)
+```
+
+# Inital functions
+- healthy = 2, sick = 1, and dead = 0, w
+```{R}
+b_1 <- function(t){
+    return(12*30000*0.15*(1.015^t))
+}
+
+a <- 3.5 * (10^(-4))
+b <- 7 * (10^(-8))
+c <- 0.157
+mu <- function(t) {
+    return(a + b*exp(c*t))
+}
+```
+
+## Assignment 1A
+```{R}
+spot_rates = read.csv('./interest_rates.csv')
+colnames(spot_rates) = c("y",'r')
+
+D <- function(s, t) {
+    rates <- spot_rates
+    rates$s <- s
+    rates$t <- t
+    rates <- rates %>% filter(spot_rates["y"] >= s - 1 & spot_rates["y"] < t)
+    r_cum <- apply(rates, 1, function(x) (min(x["y"] + 1, x["t"]) - max(x["s"], x["y"])) * x["r"])
+    return(exp(-sum(r_cum)))
+}
+
+```
+
+## Assigment 1B
+
+
+```{r}
+load("./transition_data.RData")
+```
+
+
+```{r}
+dim(stateMatrix)
+# The amount of sickness and death increase by time
+plot(1:3650/365, apply(stateMatrix, 2, mean))
+
+# Percentage of data in state 2 or 1
+plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x==2)))
+plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 1)))
+
+# Define a function to calculate the length of consecutive runs in a state
+state_transition_frequency <- function(x,state_1,state_2) {
+     rle_result <- rle(x)
+     rle_result$lengths = cumsum(rle_result$lengths)
+
+     # Find the indices of runs of state_1 that are followed by state_2
+     indices <- which(rle_result$values == state_1 & c(rle_result$values[-1], NA) == state_2)
+
+    # Return the the indices (time) of state transition
+    return(rle_result$lengths[indices])
+}
+
+# Example test transition times for state 1 to 2
+state_transition_frequency(stateMatrix[3397, ], 2,0)
+
+# Apply the function to each row of the stateMatrix
+s1_to_s2 <- apply(stateMatrix, 1, function(x) {
+    state_transition_frequency(x, 2,1)
+})
+hist(unlist(s1_to_s2))
+apply(unlist(s1_to_s2), 0, function(x) round(x / 365))
+
+
+# Apply the function to each row of the stateMatrix
+s2_to_s1 <- apply(stateMatrix, 1, function(x) {
+    state_transition_frequency(x, 2,1)
+})
+hist(unlist(s2_to_s1)/365)
+
+
+
+```
