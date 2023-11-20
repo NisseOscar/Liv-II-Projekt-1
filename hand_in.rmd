@@ -22,7 +22,7 @@ library(tidyverse)
 # Inital functions
 - healthy = 2, sick = 1, and dead = 0, w
 ```{R}
-b_1 <- function(t){
+b1 <- function(t){
     return(12*30000*0.15*(1.015^t))
 }
 
@@ -70,7 +70,7 @@ plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 1)))
 # Define a function to calculate the length of consecutive runs in a state
 state_transition_frequency <- function(x,state_1,state_2) {
      rle_result <- rle(x)
-     rle_result$lengths = cumsum(rle_result$lengths)
+    #  rle_result$lengths = cumsum(rle_result$lengths)
 
      # Find the indices of runs of state_1 that are followed by state_2
      indices <- which(rle_result$values == state_1 & c(rle_result$values[-1], NA) == state_2)
@@ -80,14 +80,13 @@ state_transition_frequency <- function(x,state_1,state_2) {
 }
 
 # Example test transition times for state 1 to 2
-state_transition_frequency(stateMatrix[3397, ], 2,0)
+state_transition_frequency(stateMatrix[3397, ], 2,1)
 
 # Apply the function to each row of the stateMatrix
 s1_to_s2 <- apply(stateMatrix, 1, function(x) {
     state_transition_frequency(x, 2,1)
 })
-hist(unlist(s1_to_s2))
-apply(unlist(s1_to_s2), 0, function(x) round(x / 365))
+hist(unlist(s1_to_s2)/365)
 
 
 # Apply the function to each row of the stateMatrix
@@ -96,6 +95,183 @@ s2_to_s1 <- apply(stateMatrix, 1, function(x) {
 })
 hist(unlist(s2_to_s1)/365)
 
+plot(unlist(s1_to_s2),s2_to_s1)
 
+
+```
+
+
+```{r}
+mu12 <- function(t){
+    return(50)
+}
+
+mu21 <- function(t){
+    return(2)
+}
+
+```
+
+### Assigment 3
+
+# Set function 
+```{r}
+library(deSolve)
+
+# define reserve ode
+reserves_ode <- function(t, V, par) {
+  tt <- t / par$step + 1
+  dV1 <- D(t,tt)*V[1]+b1(t)*tt-mu(t)*V[1]*tt - mu12(t)*(V[2]-V[1])*tt
+  dV2 <- D(t,tt)*V[2]-mu(t)*tt*V[2]-mu21(t)*(V[1]-V[2])*tt
+  return(list(c(dV1,dV2)))
+}
+
+# define boundary values for the last time point
+boundaryValuesEndOfContract <- c(V1 = 0, V2 = 0)     
+t_max = 65
+
+```
+
+```{r}
+library(deSolve)
+# define time points where the function "exampleODE" should be evaluated
+timeStep <- 1/365
+timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+
+# define parameters
+par <- list(step = abs(timeStep))             # step size needed for indexation
+
+# solve the ODE
+odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
+
+# have a look at the solutions
+plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
+lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
+
+one_time_premium = odeSol[length(odeSol)]
+
+```
+
+# Calculate dependency on the timestep size
+```{r}
+reservs_per_timestep <- function(timestep){
+    timePointsBackward <- seq(from = 10, to = 0, by = -timestep)
+    par <- list(step = abs(timestep))  
+    odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
+    return(odeSol)
+}
+timesteps = c(1/365, 1/52, 1/12, 1/4, 1/2,1)
+reservs <- lapply(timesteps, reservs_per_timestep)
+one_time_premiums <- lapply(reservs, function(x) x[length(x)])
+
+# put reserves into a dataframe for plotting
+reservs <- 
+
+# Plot the results
+ggplot %>%
+  ggplot(aes(x = timePointsBackward, y = reservs, color = timestep)) +
+  geom_line() +
+  geom_line(lty = 2) +
+  scale_color_gradient(low = "blue", high = "red") +
+  theme_minimal()
+```
+
+# Assigment 4
+```{r}
+
+pi <- 100000 # Test premium of 100 dollars
+b2 <- function(t){
+    return(pi*(1.015^t))
+}
+
+timeStep <- 1/365
+timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+
+# define reserve ode
+reserves_ode <- function(t, V, par) {
+  tt <- t / par$step + 1
+  dV1 <- D(t,tt)*V[1]+b1(t)*tt-mu(t)*V[1]*tt - mu12(t)*(V[2]-V[1])*tt
+  dV2 <- D(t,tt)*V[2]-tt*b2(t)-mu(t)*tt*V[2]-mu21(t)*(V[1]-V[2])*tt
+  return(list(c(dV1,dV2)))
+}
+
+# solve the ODE
+odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
+
+# have a look at the solutions
+plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
+lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
+
+```
+
+# Run experimeent as a function of the premium rate
+```{r}
+reserves_w_premium <- function(pi){
+    b2 <- function(t){
+        return(pi*(1.015^t))
+    }
+    # solve the ODE
+    odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
+}
+
+pis <- c(100000,10000,1000,100) # Test premium of 100 dollars
+reservs <- lapply(timesteps, reservs_per_timestep)
+
+# have a look at the solutions
+plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
+lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
+
+```
+
+
+# Assigment 5
+
+```{r}
+
+n_bootstraps = 100
+par <- list(step = abs(timeStep)) 
+
+# define reserve ode
+reserves_ode <- function(t, V, par) {
+  tt <- t / par$step + 1
+  dV1 <- D(t,tt)*V[1]+b1(t)*tt-mu(t)*V[1]*tt - mu12(t)*(V[2]-V[1])*tt
+  dV2 <- D(t,tt)*V[2]-mu(t)*tt*V[2]-mu21(t)*(V[1]-V[2])*tt
+  return(list(c(dV1,dV2)))
+}
+timeStep <- 1/365
+timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+
+for i in 1:n_bootstraps{
+    bootsstraps = sample(state_transition_frequency)
+
+    # Apply the function to each row of the stateMatrix
+    s1_to_s2 <- apply(stateMatrix, 1, function(x) {
+        state_transition_frequency(x, 2,1)
+    })
+    hist(unlist(s1_to_s2)/365)
+
+
+    # Apply the function to each row of the stateMatrix
+    s2_to_s1 <- apply(stateMatrix, 1, function(x) {
+        state_transition_frequency(x, 2,1)
+    })
+
+    mu12 <- function(t){
+        return(50)
+    }
+
+    mu21 <- function(t){
+        return(2)
+    }
+
+    # solve the ODE
+    odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
+
+    one_time_premium = odeSol[length(odeSol)]
+
+}
 
 ```
