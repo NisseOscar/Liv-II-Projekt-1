@@ -57,51 +57,94 @@ D <- function(s, t) {
 load("./transition_data.RData")
 ```
 
-
+### Explore data
 ```{r}
 dim(stateMatrix)
 # The amount of sickness and death increase by time
 plot(1:3650/365, apply(stateMatrix, 2, mean))
 
-# Percentage of data in state 2 or 1
+#  Check what percentage of data is in certain states over time
 plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x==2)))
 plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 1)))
+plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 0)))
 
-# Define a function to calculate the length of consecutive runs in a state
-state_transition_frequency <- function(x,state_1,state_2) {
-     rle_result <- rle(x)
-    #  rle_result$lengths = cumsum(rle_result$lengths)
-
-     # Find the indices of runs of state_1 that are followed by state_2
-     indices <- which(rle_result$values == state_1 & c(rle_result$values[-1], NA) == state_2)
-
-    # Return the the indices (time) of state transition
-    return(rle_result$lengths[indices])
+# Create state transition dataframe
+for (i in 1:dim(stateMatrix)[1]){
+    transitions = rle(stateMatrix[i,])
+    t = cumsum(transitions$lengths)/365
+    state = transitions$values
+    s = transitions$lengths/365
+    result_df <- data.frame(s = s, from = state, to = c(state[-1], NA),t=t)
+    
+    # join into a single dataframe
+    if (i==1) {
+        state_transition_df = result_df
+    } else {
+        state_transition_df = rbind(state_transition_df, result_df)
+    }
 }
 
-# Example test transition times for state 1 to 2
-state_transition_frequency(stateMatrix[3397, ], 2,1)
+# Plot some results
+state_transition_df %>% 
+    filter(from == 2 & to == 1)  %>%
+    ggplot(aes(x = t, y = s)) + geom_point() + ggtitle("Healthy to sick")
 
-# Apply the function to each row of the stateMatrix
-s1_to_s2 <- apply(stateMatrix, 1, function(x) {
-    state_transition_frequency(x, 2,1)
-})
-hist(unlist(s1_to_s2)/365)
+###### Plot histograms
 
+##### Healthy to sick
+state_transition_df %>% 
+    filter(from == 2 & to == 1)  %>%
+    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick")
 
-# Apply the function to each row of the stateMatrix
-s2_to_s1 <- apply(stateMatrix, 1, function(x) {
-    state_transition_frequency(x, 2,1)
-})
-hist(unlist(s2_to_s1)/365)
+# Plot histograms
+state_transition_df %>% 
+    filter(from == 2 & to == 1)  %>%
+    ggplot(aes(x = t)) + geom_histogram() + ggtitle("Healthy to sick")
 
-plot(unlist(s1_to_s2),s2_to_s1)
+##### Sick to healthy
+
+# Plot histograms
+state_transition_df %>% 
+    filter(from == 1 & to == 2)  %>%
+    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick")
+
+# Plot histograms
+state_transition_df %>% 
+    filter(from == 1 & to == 2)  %>%
+    ggplot(aes(x = t)) + geom_histogram() + ggtitle("Healthy to sick")
 
 
 ```
 
-
+# Create MModels
 ```{r}
+
+# Structure data to be used in glm
+state_transition_df$from = as.factor(state_transition_df$from)
+
+# Create glm models exponential 
+model_21_s = glm(s ~ 1,family = Gamma(link="log") ,data=state_transition_df %>% filter(from == 2 & to == 1))
+model_21_t = glm(t ~ 1,family = Gamma(link="log") ,data=state_transition_df %>% filter(from == 2 & to == 1))
+summary(model_21_t)
+summary(model_21_s)
+
+# plot fit as histogram
+state_transition_df %>% 
+    filter(from == 2 & to == 1)  %>%
+    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick") + geom_density(aes(y=..density.., color = "density")) + geom_density(aes(y=..count.., color = "count"))
+
+# Create glm models exponential 
+model_21_s = glm(s ~ 1,family = Gamma(link="log") ,data=state_transition_df %>% filter(from == 2 & to == 1))
+model_21_t = glm(t ~ 1,family = Gamma(link="log") ,data=state_transition_df %>% filter(from == 2 & to == 1))
+summary(model_21_t)
+
+# plot fit as histogram
+state_transition_df %>% 
+    filter(from == 2 & to == 1)  %>%
+    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick") + geom_density(aes(y=..density.., color = "density")) + geom_density(aes(y=..count.., color = "count"))
+
+
+
 mu12 <- function(t){
     return(50)
 }
@@ -120,9 +163,9 @@ library(deSolve)
 
 # define reserve ode
 reserves_ode <- function(t, V, par) {
-  tt <- t / par$step + 1
-  dV1 <- D(t,tt)*V[1]+b1(t)*tt-mu(t)*V[1]*tt - mu12(t)*(V[2]-V[1])*tt
-  dV2 <- D(t,tt)*V[2]-mu(t)*tt*V[2]-mu21(t)*(V[1]-V[2])*tt
+  tt <- par$step 
+  dV1 <- (b1(t)-mu(t)*V[1] - mu12(t)*(V[2]-V[1]))*tt + D(t,t+tt)*V[1]
+  dV2 <- (-mu(t)*V[2]-mu21(t)*(V[1]-V[2]))*tt +D(t,t+tt)*V[2]
   return(list(c(dV1,dV2)))
 }
 
@@ -166,23 +209,24 @@ reservs <- lapply(timesteps, reservs_per_timestep)
 one_time_premiums <- lapply(reservs, function(x) x[length(x)])
 
 # put reserves into a dataframe for plotting
-reservs <- 
+reservs <-  lapply(reservs, function(x) data.frame(x))
 
-# Plot the results
-ggplot %>%
-  ggplot(aes(x = timePointsBackward, y = reservs, color = timestep)) +
-  geom_line() +
-  geom_line(lty = 2) +
-  scale_color_gradient(low = "blue", high = "red") +
-  theme_minimal()
+ggplot() +
+#   geom_line(data = reservs[[1]], aes(x = time, y = V2, color = "daily")) +
+  geom_line(data = reservs[[2]], aes(x = time, y = V2, color = "weekly")) +
+  geom_line(data = reservs[[3]], aes(x = time, y = V2, color = "monthly")) +
+  geom_line(data = reservs[[4]], aes(x = time, y = V2, color = "quarterly")) +
+  geom_line(data = reservs[[5]], aes(x = time, y = V2, color = "half-yearly")) +
+  geom_line(data = reservs[[6]], aes(x = time, y = V2, color = "yearly")) +
+    theme_minimal()
 ```
 
 # Assigment 4
 ```{r}
 
-pi <- 100000 # Test premium of 100 dollars
+pi <- 10 # Test premium of 100 dollars
 b2 <- function(t){
-    return(pi*(1.015^t))
+    return(-pi*(1.015^t))
 }
 
 timeStep <- 1/365
@@ -192,8 +236,8 @@ timePointsForward <- seq(from = 0, to = 10, by = timeStep)
 # define reserve ode
 reserves_ode <- function(t, V, par) {
   tt <- t / par$step + 1
-  dV1 <- D(t,tt)*V[1]+b1(t)*tt-mu(t)*V[1]*tt - mu12(t)*(V[2]-V[1])*tt
-  dV2 <- D(t,tt)*V[2]-tt*b2(t)-mu(t)*tt*V[2]-mu21(t)*(V[1]-V[2])*tt
+  dV1 <- (b1(t)-mu(t)*V[1] - mu12(t)*(V[2]-V[1]))*tt + D(t,t+tt)*V[1]
+  dV2 <- (b2(t)-mu(t)*V[2]-mu21(t)*(V[1]-V[2]))*tt +D(t,t+tt)*V[2]
   return(list(c(dV1,dV2)))
 }
 
@@ -210,18 +254,29 @@ lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
 ```{r}
 reserves_w_premium <- function(pi){
     b2 <- function(t){
-        return(pi*(1.015^t))
+        return(-pi*(1.015^t))
     }
     # solve the ODE
     odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
 }
 
-pis <- c(100000,10000,1000,100) # Test premium of 100 dollars
-reservs <- lapply(timesteps, reservs_per_timestep)
+pis <- c(-1000/365,-2000/365,-5000/365,-10000/365,0,1000/365,2000/365,5000/365,10000/365) # Test premium of 100 dollars
+reservs <- lapply(pis, reserves_w_premium)
 
-# have a look at the solutions
-plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
-lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
+reservs <-  lapply(reservs, function(x) data.frame(x))
+
+ggplot() +
+  geom_line(data = reservs[[1]], aes(x = time, y = V2, color = "-1000")) +
+  geom_line(data = reservs[[2]], aes(x = time, y = V2, color = "-2000")) +
+  geom_line(data = reservs[[3]], aes(x = time, y = V2, color = "-5000")) +
+  geom_line(data = reservs[[4]], aes(x = time, y = V2, color = "-10000")) +
+  geom_line(data = reservs[[5]], aes(x = time, y = V2, color = "0")) +
+  geom_line(data = reservs[[6]], aes(x = time, y = V2, color = "1000")) +
+  geom_line(data = reservs[[7]], aes(x = time, y = V2, color = "2000")) +
+  geom_line(data = reservs[[8]], aes(x = time, y = V2, color = "5000")) +
+  geom_line(data = reservs[[9]], aes(x = time, y = V2, color = "10000")) +
+    theme_minimal()
+
 
 ```
 
