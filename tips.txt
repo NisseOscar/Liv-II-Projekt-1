@@ -1,0 +1,6 @@
+Ta börja med att lösa systemet med systemet är 0
+och sedan bygga upp det.
+
+Utöka tillståndsrum och styckvis konstant  2.2
+
+1.2a i Steffessen
