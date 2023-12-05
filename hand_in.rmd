@@ -26,9 +26,6 @@ library(deSolve)
 # Inital functions
 - healthy = 2, sick = 1, and dead = 0, w
 ```{R}
-b1 <- function(t){
-    return(12*30000*0.15*(1.015^t))
-}
 
 a <- 3.5 * (10^(-4))
 b <- 7 * (10^(-8))
@@ -43,7 +40,11 @@ mu <- function(t) {
 spot_rates = read.csv('./interest_rates.csv')
 colnames(spot_rates) = c("y",'r')
 
-r <- function(s,t){
+r <- function(t){
+    return(spot_rates[spot_rates["y"] == floor(t+1), "r"])
+}
+
+r_cum <- function(s,t){
     rates <- spot_rates
     rates$s <- s
     rates$t <- t
@@ -53,14 +54,12 @@ r <- function(s,t){
 }
 
 D <- function(s, t) {
-    return(exp(r(s,t)))
+    return(exp(-r_cum(s,t)))
 }
 
 ```
 
 ## Assigment 1B
-
-
 ```{r}
 load("./transition_data.RData")
 ```
@@ -194,17 +193,16 @@ mu21 <- function(t,s){
 ```{r}
 # define reserve ode
 reserves_ode <- function(t, V,par) {
-  tt  <- par$step
-  dV1_s <- 0
-  dV2_s <- 0
-  dV1 <- par$b1_t[t]-par$mu[t]*V[1] - mu12(t,s)*(V[2]-V[1]) + D(t,t+tt)*V[1] - dV1_s
-  dV2 <- par$b2_t[t]-mu(t)*V[2]-mu21(t,s)*(V[1]-V[2]) +D(t,t+tt)*V[2] - dV2_s
+  tt <- t / par$step + 1
+  dV1_s <- par$mu12*(V[2]-V[1])
+  dV2_s <- par$mu21*(V[1]-V[2])
+  dV1 <- par$b1_t[tt]-par$mu[tt]*V[1] + D(t,t+par$step)*V[1] - dV1_s
+  dV2 <- par$b2_t[tt]-par$mu[tt]*V[2] + D(t,t+par$step)*V[2] - dV2_s
   return(list(c(dV1,dV2)))
 }
 
 # define boundary values for the last time point
 boundaryValuesEndOfContract <- c(V1 = 0, V2 = 0)     
-t_max = 60
 
 ```
 
@@ -216,11 +214,13 @@ timePointsForward <- seq(from = 0, to = 10, by = timeStep)
 
 # define parameters
 par <- list(
-    step = abs(timeStep)
-    b1_t = 12*30000*0.15*(1.015^t),
-    b2_t = 0*(1.015^t),   
-    mu = mu(t), 
-)             # step size needed for indexation
+    step = abs(timeStep),
+    b1_t = 12*30000*0.15*(1.015^timePointsForward)
+    b2_t = 0*(1.015^timePointsForward),   
+    mu = mu(timePointsForward+50), 
+    mu12 = 34.38452,
+    mu21 = 1.218293
+)
 
 # solve the ODE
 odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
@@ -229,15 +229,24 @@ odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func 
 plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
 lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
 
-one_time_premium = sum(odeSol[dim(odeSol)[1],2:3])
-
+one_time_premium = -sum(odeSol[dim(odeSol)[1],2:3])
+one_time_premium
 ```
 
 # Calculate dependency on the timestep size
 ```{r}
-reservs_per_timestep <- function(timestep){
-    timePointsBackward <- seq(from = 10, to = 0, by = -timestep)
-    par <- list(step = abs(timestep))  
+reservs_per_timestep <- function(timeStep){
+    timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
+    timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+    # define parameters
+    par <- list(
+        step = abs(timeStep),
+        b1_t = 12*30000*0.15*(1.015^timePointsForward),
+        b2_t = 0*(1.015^timePointsForward),   
+        mu = mu(timePointsForward+50), 
+        mu12 = 34.38452,
+        mu21 = 1.218293
+    )
     odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
     return(odeSol)
 }
@@ -266,26 +275,20 @@ ggsave("Plots/granularity.png", width = 10, height = 10, units = "cm")
 # Assigment 4
 ```{r}
 
-pi <- 10000 # Test premium of 100 dollars
-b2 <- function(t){
-    return(-pi*(1.015^t))
-}
+pi <- 2000 # Test premium of 100 dollars
 
 timeStep <- 1/365
 timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
 timePointsForward <- seq(from = 0, to = 10, by = timeStep)
 
-
-# define reserve ode
-reserves_ode <- function(t, V,par) {
-  tt  <- par$step
-  s<-0
-  dV1_s <- 0
-  dV2_s <- 0
-  dV1 <- b1(t)-mu(t)*V[1] - mu12(t,s)*(V[2]-V[1]) + D(t,t+tt)*V[1] - dV1_s
-  dV2 <- b2(t)-mu(t)*V[2]-mu21(t,s)*(V[1]-V[2]) +D(t,t+tt)*V[2] - dV2_s
-  return(list(c(dV1,dV2)))
-}
+par <- list(
+    step = abs(timeStep),
+    b1_t = 12*30000*0.15*(1.015^timePointsForward),
+    b2_t = -pi*(1.015^timePointsForward),   
+    mu = mu(timePointsForward+50), 
+    mu12 = 34.38452,
+    mu21 = 1.218293
+)
 
 # solve the ODE
 odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
@@ -302,9 +305,14 @@ ggsave("Plots/premiums_V1_V2_2.png", width = 10, height = 10, units = "cm")
 # Run experimeent as a function of the premium rate
 ```{r}
 reserves_w_premium <- function(pi){
-    b2 <- function(t){
-        return(-pi*(1.015^t))
-    }
+    par <- list(
+        step = abs(timeStep),
+        b1_t = 12*30000*0.15*(1.015^timePointsForward),
+        b2_t = -pi*(1.015^timePointsForward),   
+        mu = mu(timePointsForward+50), 
+        mu12 = 34.38452,
+        mu21 = 1.218293
+    )
     # solve the ODE
     odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
     return(odeSol)
@@ -336,25 +344,22 @@ ggsave("Plots/premiums.png", width = 10, height = 10, units = "cm")
 
 
 # Assigment 5
-
 ```{r}
 n_bootstraps = 1000
-par <- list(step = abs(timeStep)) 
-
 timeStep <- 1/365
 timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
 timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+n_samples = nrow(stateMatrix)
 
 res_v1 = c()
 res_v2 = c()
-for i in 1:n_bootstraps{
-
-    # Sample as many samples  as we have rows in the state transition matrix
-    bootstraps = sample(stateMatrix, replace = TRUE, nrow(stateMatrix))
+for (i in 1:n_bootstraps){
+    # Sample rows from statematrix with replacement
+    bootstraps = stateMatrix[sample(1:n_samples, n_samples, replace=TRUE),]
 
     # Create state transition dataframe
-    for (i in 1:dim(bootsstraps)[1]){
-        transitions = rle(bootsstraps[i,])
+    for (i in 1:dim(bootstraps)[1]){
+        transitions = rle(bootstraps[i,])
         t = cumsum(transitions$lengths)/365
         state = transitions$values
         s = transitions$lengths/365
@@ -371,30 +376,65 @@ for i in 1:n_bootstraps{
     # calculate state 1 to 2
     trans_tmp <- state_transition_df %>% filter(from == 1 & to == 2)
     exp_fit_12 <- fitdist(trans_tmp$s, "exp")
-    mu12 <- function(t){
-        return(-exp_fit_12$estimate)
-    }
 
     # calculate state 2 to 1 
     trans_tmp <- state_transition_df %>% filter(from == 2 & to == 1)
     exp_fit_21 <- fitdist(trans_tmp$s, "exp")
-    mu21 <- function(t){
-        return(-exp_fit_21$estimate)
-    }
+
+    par <- list(
+        step = abs(timeStep),
+        b1_t = 12*30000*0.15*(1.015^timePointsForward),
+        b2_t = 0*(1.015^timePointsForward),   
+        mu = mu(timePointsForward+50), 
+        mu12 = exp_fit_12$estimate,
+        mu21 = exp_fit_21$estimate
+    )
 
     # solve the ODE
     odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
 
-    one_time_premiums <- lapply(reservs, function(x) sum(x[dim(x)[1],2:3]))
-
     # Add sum of column 2 and 3 to res
-    res_V1 <- cbind(res_V1, odeSol[,2])
-    res_V2 <- cbind(res_V2, odeSol[,3])
+    res_v1 <- cbind(res_v1, odeSol[,2])
+    res_v2 <- cbind(res_v2, odeSol[,3])
 
-    
+    #Save to file
+    write.csv(res_v1, "res_V1.csv")
+    write.csv(res_v2, "res_V2.csv")
 }
-#Save to file
-write.csv(res_V1, "res_V1.csv")
-write.csv(res_V2, "res_V2.csv")
+```
+
+# Create Plot
+```{r}
+V1_res <- read.csv("res_V1.csv")
+V2_res <- read.csv("res_V2.csv")
+
+# rEMOVE first column  
+V1_res <- V1_res[,2:101]
+V2_res <- V2_res[,2:101]
+
+V_res = V1_res + V2_res
+V_res$t <- 50+timePointsBackward
+
+V_melt <- melt(V_res, id.vars="t")
+colnames(V_melt) <- c("t", "bootstrap", "reserv")
+
+p = ggplot(V_melt,aes(x=t, y=reserv, group=bootstrap)) +
+    theme_bw() +
+    theme(panel.grid=element_blank()) +
+    geom_line(size=0.2, alpha=0.1)
+p
+# save plot
+ggsave("Plots/reserve_bootstraps.png", width = 10, height = 10, units = "cm")
+
+
+# Plot histogram of one time premiums
+one_time_premiums <- V_res[dim(V_res)[1],]
+one_time_premiums
+# DROP t column
+one_time_premiums <- one_time_premiums[,1:100]
+one_time_premiums
+
+ggplot(melt(one_time_premiums), aes(x=value)) + geom_histogram(binwidth = 10) + ggtitle("One time premiums")
+ggsave("Plots/bootstrap_one_time_premiums.png", width = 10, height = 10, units = "cm")
 
 ```
