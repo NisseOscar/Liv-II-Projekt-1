@@ -90,6 +90,7 @@ for (i in 1:dim(stateMatrix)[1]){
         state_transition_df = rbind(state_transition_df, result_df)
     }
 }
+state_transition_df
 
 ###### Plot histograms
 
