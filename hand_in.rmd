@@ -20,6 +20,8 @@ library(tidyverse)
 library(VGAM) 
 library(fitdistrplus)
 library(deSolve)
+library(reshape2)
+```
 
 ```
 
@@ -197,8 +199,8 @@ reserves_ode <- function(t, V,par) {
   tt <- t / par$step + 1
   dV1_s <- par$mu12*(V[2]-V[1])
   dV2_s <- par$mu21*(V[1]-V[2])
-  dV1 <- par$b1_t[tt]-par$mu[tt]*V[1] + D(t,t+par$step)*V[1] - dV1_s
-  dV2 <- par$b2_t[tt]-par$mu[tt]*V[2] + D(t,t+par$step)*V[2] - dV2_s
+  dV1 <- par$b1_t[tt]-par$mu[tt]*V[1] +r(t)*V[1] - dV1_s
+  dV2 <- par$b2_t[tt]-par$mu[tt]*V[2] +r(t)*V[2] - dV2_s
   return(list(c(dV1,dV2)))
 }
 
@@ -216,7 +218,7 @@ timePointsForward <- seq(from = 0, to = 10, by = timeStep)
 # define parameters
 par <- list(
     step = abs(timeStep),
-    b1_t = 12*30000*0.15*(1.015^timePointsForward)
+    b1_t = 12*30000*0.15*(1.015^timePointsForward),
     b2_t = 0*(1.015^timePointsForward),   
     mu = mu(timePointsForward+50), 
     mu12 = 34.38452,
@@ -270,7 +272,7 @@ ggplot() +
     theme_minimal()
 
 # save plot
-ggsave("Plots/granularity.png", width = 10, height = 10, units = "cm")
+ggsave("Plots/granularity.jpg", width = 10, height = 10, units = "cm")
 ```
 
 # Assigment 4
@@ -299,7 +301,7 @@ plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), m
 lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
 
 # save plot
-ggsave("Plots/premiums_V1_V2_2.png", width = 10, height = 10, units = "cm")
+ggsave("Plots/premiums_V1_V2_2.jpg", width = 10, height = 10, units = "cm")
 
 ```
 
@@ -339,14 +341,14 @@ ggplot() +
     theme_minimal()
 
 # save plot
-ggsave("Plots/premiums.png", width = 10, height = 10, units = "cm")
+ggsave("Plots/premiums.jpg", width = 10, height = 10, units = "cm")
 
 ```
 
 
 # Assigment 5
 ```{r}
-n_bootstraps = 1000
+n_bootstraps = 100
 timeStep <- 1/365
 timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
 timePointsForward <- seq(from = 0, to = 10, by = timeStep)
@@ -425,7 +427,7 @@ p = ggplot(V_melt,aes(x=t, y=reserv, group=bootstrap)) +
     geom_line(size=0.2, alpha=0.1)
 p
 # save plot
-ggsave("Plots/reserve_bootstraps.png", width = 10, height = 10, units = "cm")
+ggsave("Plots/reserve_bootstraps.jpg", width = 10, height = 10, units = "cm")
 
 
 # Plot histogram of one time premiums
@@ -436,6 +438,6 @@ one_time_premiums <- one_time_premiums[,1:100]
 one_time_premiums
 
 ggplot(melt(one_time_premiums), aes(x=value)) + geom_histogram(binwidth = 10) + ggtitle("One time premiums")
-ggsave("Plots/bootstrap_one_time_premiums.png", width = 10, height = 10, units = "cm")
+ggsave("Plots/bootstrap_one_time_premiums.jpg", width = 10, height = 10, units = "cm")
 
 ```
