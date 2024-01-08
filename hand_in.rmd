@@ -1,21 +1,5 @@
----
-output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    session_info: TRUE
-    style: TRUE
-    comment: "#;-)"
-    tidyverse_quiet: FALSE
-    std_out_err: TRUE
-knit: reprex::reprex_render
----
-
-## Init
-
-# Packages
-
-```{r, eval = requireNamespace("tidyverse", quietly = TRUE)}
+# Load initial packages 
+```{r}
 library(tidyverse)
 library(VGAM) 
 library(fitdistrplus)
@@ -40,24 +24,40 @@ mu <- function(t) {
 ## Assignment 1A
 ```{R}
 spot_rates = read.csv('./interest_rates.csv')
-colnames(spot_rates) = c("y",'r')
+colnames(spot_rates) = c("x",'r')
+spot_rates$x = spot_rates$x - 1
 
 r <- function(t){
-    return(spot_rates[spot_rates["y"] == floor(t+1), "r"])
+    return(spot_rates[spot_rates["x"] == floor(t), "r"])
 }
+
 
 r_cum <- function(s,t){
     rates <- spot_rates
     rates$s <- s
     rates$t <- t
-    rates <- rates %>% filter(spot_rates["y"] >= s - 1 & spot_rates["y"] < t)
-    r_cum <- apply(rates, 1, function(x) (min(x["y"] + 1, x["t"]) - max(x["s"], x["y"])) * x["r"])
+    rates <- rates %>% filter(spot_rates$x >= s - 1 & spot_rates$x < t)
+    r_cum <- apply(rates, 1, function(x) (min(x["x"] + 1, x["t"]) - max(x["s"], x["x"])) * x["r"])
     return(sum(r_cum))
 }
 
 D <- function(s, t) {
     return(exp(-r_cum(s,t)))
 }
+
+as.nu
+
+
+df <- data.frame(t = 1:299/10)
+df$D <- apply(df, 1, function(x) D(0, x["t"]))
+p <- ggplot(df, aes(x = t, y = D)) + geom_line() +theme_minimal()
+ggsave("plots/discount_rate.jpg", p, width = 15, height = 10, units = "cm")
+
+df$r <- apply(df, 1, function(x) r(as.numeric(x["t"])))
+p <- ggplot(df , aes(x = t, y = r)) + geom_line()+theme_minimal()
+ggsave("plots/spot_rates.jpg", p, width = 15, height = 10, units = "cm")
+
+
 
 ```
 
@@ -68,14 +68,6 @@ load("./transition_data.RData")
 
 ### Explore data
 ```{r}
-dim(stateMatrix)
-# The amount of sickness and death increase by time
-plot(1:3650/365, apply(stateMatrix, 2, mean))
-
-#  Check what percentage of data is in certain states over time
-plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x==2)))
-plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 1)))
-plot(50+1:3650 / 365, apply(stateMatrix, 2, function(x) mean(x == 0)))
 
 # Create state transition dataframe
 for (i in 1:dim(stateMatrix)[1]){
@@ -92,46 +84,40 @@ for (i in 1:dim(stateMatrix)[1]){
         state_transition_df = rbind(state_transition_df, result_df)
     }
 }
-state_transition_df
 
 ###### Plot histograms
 
 ##### Healthy to sick
-state_transition_df %>% 
+p <- state_transition_df %>% 
     filter(from == 2 & to == 1)  %>%
-    ggplot(aes(x = log(s))) + geom_histogram() + ggtitle("Healthy to sick")
+    ggplot(aes(x = s,y=..density..)) + geom_histogram() + ggtitle("Healthy to sick")+theme_minimal()
+ggsave("plots/2_1_transitions_s.jpg", p, width = 15, height = 10, units = "cm")
 
-# Plot histograms
-state_transition_df %>% 
+p <- state_transition_df %>% 
     filter(from == 2 & to == 1)  %>%
-    ggplot(aes(x = t)) + geom_histogram() + ggtitle("Healthy to sick")
+    ggplot(aes(x = t,y=..density..)) + geom_histogram() + ggtitle("Healthy to sick")+theme_minimal()
+ggsave("plots/2_1_transitions_t.jpg", p, width = 15, height = 10, units = "cm")
 
 ##### Sick to healthy
-
-# Plot histograms
-state_transition_df %>% 
+p <- state_transition_df %>% 
     filter(from == 1 & to == 2)  %>%
-    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick")
+    ggplot(aes(x = s)) + geom_histogram() + ggtitle("Healthy to sick")+theme_minimal()
+ggsave("plots/1_2_transitions_s.jpg", p, width = 15, height = 10, units = "cm")
 
-# Plot histograms
-state_transition_df %>% 
+p <- state_transition_df %>% 
     filter(from == 1 & to == 2)  %>%
-    ggplot(aes(x = t)) + geom_histogram() + ggtitle("Healthy to sick")
+    ggplot(aes(x = t)) + geom_histogram() + ggtitle("Healthy to sick")+theme_minimal()
+ggsave("plots/1_2_transitions_t.jpg", p, width = 15, height = 10, units = "cm")
+
+colnames(state_transition_df)
+```
 
 ```
 
 # Fit and compare different models
 ```{r}
 
-state_1 <- 1
-state_2 <- 2
-trans_tmp <- state_transition_df %>% filter(from == state_1 & to == state_2)
-
-# Create glm models exponential 
-model_s = lm(s ~ 1, data=trans_tmp)
-model_t = lm(t ~ 1, data=trans_tmp)
-summary(model_21_t)
-summary(model_21_s)
+trans_tmp <- state_transition_df %>% filter(from == 1 & to == 2)
 
 # fit a weibull distribution
 wei_fit <- fitdist(trans_tmp$s, "weibull")
@@ -142,14 +128,9 @@ summary(lnorm_fit)
 # Fit exponential distribution
 exp_fit <- fitdist(trans_tmp$s, "exp")
 summary(exp_fit)
-# # Fit goompertz makeham distribution
-# fit_0 <- vglm(s ~ 1, gompertz, data = trans_tmp)
-# qm_fit <- vglm(s ~ 1, makeham, data = trans_tmp,etastart = cbind(predict(fit_0), 0))
-# summary(qm_fit)
-# coef(fit_0)[1]
 
 # Plot different distrubtions with data
-trans_tmp %>% ggplot(aes(x = s)) + ggtitle("Healthy to sick") + 
+p<- trans_tmp %>% ggplot(aes(x = s)) + ggtitle("Healthy to sick") + 
     geom_histogram( aes(y=..density..), binwidth=0.01, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
     stat_function(fun = dweibull, args = list(shape = wei_fit$estimate[1], scale = wei_fit$estimate[2]), aes(colour = "Weibull"),linewidth=1.5,alpha=0.7) +
     stat_function(fun = dlnorm, args = list(meanlog = lnorm_fit$estimate[1], sdlog = lnorm_fit$estimate[1]), aes(colour = "logNormal"),linewidth=1.5,alpha=0.7) +
@@ -163,32 +144,61 @@ trans_tmp %>% ggplot(aes(x = s)) + ggtitle("Healthy to sick") +
     axis.text.y = element_text(size=12),
     )
     # stat_function(fun = dmakeham, args = list(a = coef(qm_fit)[1], b = coef(qm_fit)[2]), color = "Black")
-
+ggsave("plots/model_fits.jpg", p, width = 15, height = 10, units = "cm")
 # Check fits using ks.test
 ks.test((trans_tmp )$s, "punif", min = 0, max = 10)
 ks.test((trans_tmp )$s, "pexp")
 ks.test((trans_tmp )$s, "pweibull")
 ks.test((trans_tmp )$s, "plnorm")
 
+# Resulting model
+trans_tmp <- state_transition_df %>% filter(from == 1 & (to == 2 | to == NA)) 
+mu12 <- 1/mean(trans_tmp$s)
+mu12
+
 ```
 
-# Resulting Models 
 ```{r}
-p12 <- function(t,s){
-    return(exp(-34.38452*s))
-}
 
-p21 <- function(t,s){
-    return(exp(-1.218293*s))
-}
+trans_tmp <- state_transition_df %>% filter(from == 2 & to == 1)
 
-mu12 <- function(t,s){
-    return(34.38452)
-}
+# fit a weibull distribution
+wei_fit <- fitdist(trans_tmp$s, "weibull")
+summary(wei_fit)
+# Fit lognormal distribution
+lnorm_fit <- fitdist(trans_tmp$s, "lnorm")
+summary(lnorm_fit)
+# Fit exponential distribution
+exp_fit <- fitdist(trans_tmp$s, "exp")
+summary(exp_fit)
 
-mu21 <- function(t,s){
-    return(1.218293)
-}
+# Plot different distrubtions with data
+p<- trans_tmp %>% ggplot(aes(x = s)) + ggtitle("Healthy to sick") + 
+    geom_histogram( aes(y=..density..), binwidth=0.01, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
+    stat_function(fun = dweibull, args = list(shape = wei_fit$estimate[1], scale = wei_fit$estimate[2]), aes(colour = "Weibull"),linewidth=1.5,alpha=0.7) +
+    stat_function(fun = dlnorm, args = list(meanlog = lnorm_fit$estimate[1], sdlog = lnorm_fit$estimate[1]), aes(colour = "logNormal"),linewidth=1.5,alpha=0.7) +
+    stat_function(fun = dexp, args = list(rate = exp_fit$estimate), aes(colour = "Exponential"),linewidth=1.5,alpha=0.7) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size=48),
+    axis.title.x = element_text(size=20),
+    axis.title.y = element_text(size=20),
+    axis.text.x = element_text(size=12),
+    axis.text.y = element_text(size=12),
+    )
+    # stat_function(fun = dmakeham, args = list(a = coef(qm_fit)[1], b = coef(qm_fit)[2]), color = "Black")
+ggsave("plots/model_fits.jpg", p, width = 15, height = 10, units = "cm")
+# Check fits using ks.test
+ks.test((trans_tmp )$s, "punif", min = 0, max = 10)
+ks.test((trans_tmp )$s, "pexp")
+ks.test((trans_tmp )$s, "pweibull")
+ks.test((trans_tmp )$s, "plnorm")
+
+# Resulting model
+trans_tmp <- state_transition_df %>% filter(from == 2 & (to == 1 | to == NA)) 
+mu21 <- 1/mean(trans_tmp$s)
+mu21
+
 ```
 
 ### Assigment 3
@@ -199,8 +209,8 @@ reserves_ode <- function(t, V,par) {
   tt <- t / par$step + 1
   dV1_s <- par$mu12*(V[2]-V[1])
   dV2_s <- par$mu21*(V[1]-V[2])
-  dV1 <- par$b1_t[tt]-par$mu[tt]*V[1] +r(t)*V[1] - dV1_s
-  dV2 <- par$b2_t[tt]-par$mu[tt]*V[2] +r(t)*V[2] - dV2_s
+  dV1 <- par$b1_t[tt]-par$mu[tt]*V[1] +D(0,t)*V[1] - dV1_s
+  dV2 <- par$b2_t[tt]-par$mu[tt]*V[2] +D(0,t)*V[2] - dV2_s
   return(list(c(dV1,dV2)))
 }
 
@@ -212,26 +222,21 @@ boundaryValuesEndOfContract <- c(V1 = 0, V2 = 0)
 ```{r}
 # define time points where the function "exampleODE" should be evaluated
 timeStep <- 1/365
-timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
-timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+timePointsBackward <- seq(from = 15, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 15, by = timeStep)
 
 # define parameters
 par <- list(
     step = abs(timeStep),
-    b1_t = 12*30000*0.15*(1.015^timePointsForward),
+    b1_t = -12*30000*0.15*(1.015^timePointsForward),
     b2_t = 0*(1.015^timePointsForward),   
     mu = mu(timePointsForward+50), 
-    mu12 = 34.38452,
-    mu21 = 1.218293
+    mu12 = mu12,
+    mu21 = mu21
 )
 
 # solve the ODE
 odeSol <- ode(times = timePointsBackward, y = boundaryValuesEndOfContract, func = reserves_ode, parms = par)
-
-# have a look at the solutions
-plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), max(odeSol[, 2:3])))
-lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
-
 one_time_premium = -sum(odeSol[dim(odeSol)[1],2:3])
 one_time_premium
 ```
@@ -239,12 +244,12 @@ one_time_premium
 # Calculate dependency on the timestep size
 ```{r}
 reservs_per_timestep <- function(timeStep){
-    timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
-    timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+    timePointsBackward <- seq(from = 15, to = 0, by = -timeStep)
+    timePointsForward <- seq(from = 0, to = 15, by = timeStep)
     # define parameters
     par <- list(
         step = abs(timeStep),
-        b1_t = 12*30000*0.15*(1.015^timePointsForward),
+        b1_t = -12*30000*0.15*(1.015^timePointsForward),
         b2_t = 0*(1.015^timePointsForward),   
         mu = mu(timePointsForward+50), 
         mu12 = 34.38452,
@@ -272,7 +277,7 @@ ggplot() +
     theme_minimal()
 
 # save plot
-ggsave("Plots/granularity.jpg", width = 10, height = 10, units = "cm")
+ggsave("Plots/granularity.jpg", width = 15, height = 10, units = "cm")
 ```
 
 # Assigment 4
@@ -281,13 +286,13 @@ ggsave("Plots/granularity.jpg", width = 10, height = 10, units = "cm")
 pi <- 2000 # Test premium of 100 dollars
 
 timeStep <- 1/365
-timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
-timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+timePointsBackward <- seq(from = 15, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 15, by = timeStep)
 
 par <- list(
     step = abs(timeStep),
-    b1_t = 12*30000*0.15*(1.015^timePointsForward),
-    b2_t = -pi*(1.015^timePointsForward),   
+    b1_t = -12*30000*0.15*(1.015^timePointsForward),
+    b2_t = pi*(1.015^timePointsForward),   
     mu = mu(timePointsForward+50), 
     mu12 = 34.38452,
     mu21 = 1.218293
@@ -301,7 +306,7 @@ plot(timePointsBackward, odeSol[, 2], type = "l", ylim = c(min(odeSol[, 2:3]), m
 lines(timePointsBackward, odeSol[, 3], lty = 2, col = "red")
 
 # save plot
-ggsave("Plots/premiums_V1_V2_2.jpg", width = 10, height = 10, units = "cm")
+ggsave("Plots/premiums_V1_V2_2.jpg", width = 15, height = 10, units = "cm")
 
 ```
 
@@ -310,8 +315,8 @@ ggsave("Plots/premiums_V1_V2_2.jpg", width = 10, height = 10, units = "cm")
 reserves_w_premium <- function(pi){
     par <- list(
         step = abs(timeStep),
-        b1_t = 12*30000*0.15*(1.015^timePointsForward),
-        b2_t = -pi*(1.015^timePointsForward),   
+        b1_t = -12*30000*0.15*(1.015^timePointsForward),
+        b2_t = pi*(1.015^timePointsForward),   
         mu = mu(timePointsForward+50), 
         mu12 = 34.38452,
         mu21 = 1.218293
@@ -329,7 +334,7 @@ for (i in 1:length(reservs)){
 }
 
 
-ggplot() +
+p <- ggplot() +
   geom_line(data = reservs[[1]], aes(x = time, y = V1+V2, color = "-2000 ")) +
   geom_line(data = reservs[[2]], aes(x = time, y = V1+V2, color = "-1000")) +
   geom_line(data = reservs[[3]], aes(x = time, y = V1+V2, color = "0")) +
@@ -339,9 +344,7 @@ ggplot() +
   geom_line(data = reservs[[7]], aes(x = time, y = V1+V2, color = "2000")) +
   geom_line(data = reservs[[8]], aes(x = time, y = V1+V2, color = "5000")) +
     theme_minimal()
-
-# save plot
-ggsave("Plots/premiums.jpg", width = 10, height = 10, units = "cm")
+ggsave("Plots/premiums.jpg",p, width = 15, height = 10, units = "cm")
 
 ```
 
@@ -350,8 +353,8 @@ ggsave("Plots/premiums.jpg", width = 10, height = 10, units = "cm")
 ```{r}
 n_bootstraps = 100
 timeStep <- 1/365
-timePointsBackward <- seq(from = 10, to = 0, by = -timeStep)
-timePointsForward <- seq(from = 0, to = 10, by = timeStep)
+timePointsBackward <- seq(from = 15, to = 0, by = -timeStep)
+timePointsForward <- seq(from = 0, to = 15, by = timeStep)
 n_samples = nrow(stateMatrix)
 
 res_v1 = c()
@@ -386,7 +389,7 @@ for (i in 1:n_bootstraps){
 
     par <- list(
         step = abs(timeStep),
-        b1_t = 12*30000*0.15*(1.015^timePointsForward),
+        b1_t = -12*30000*0.15*(1.015^timePointsForward),
         b2_t = 0*(1.015^timePointsForward),   
         mu = mu(timePointsForward+50), 
         mu12 = exp_fit_12$estimate,
@@ -421,13 +424,11 @@ V_res$t <- 50+timePointsBackward
 V_melt <- melt(V_res, id.vars="t")
 colnames(V_melt) <- c("t", "bootstrap", "reserv")
 
-p = ggplot(V_melt,aes(x=t, y=reserv, group=bootstrap)) +
-    theme_bw() +
+p <- ggplot(V_melt,aes(x=t, y=reserv, group=bootstrap)) +
+    theme_minimal() +
     theme(panel.grid=element_blank()) +
     geom_line(size=0.2, alpha=0.1)
-p
-# save plot
-ggsave("Plots/reserve_bootstraps.jpg", width = 10, height = 10, units = "cm")
+ggsave("Plots/reserve_bootstraps.jpg",p, width = 15, height = 10, units = "cm")
 
 
 # Plot histogram of one time premiums
@@ -437,7 +438,10 @@ one_time_premiums
 one_time_premiums <- one_time_premiums[,1:100]
 one_time_premiums
 
-ggplot(melt(one_time_premiums), aes(x=value)) + geom_histogram(binwidth = 10) + ggtitle("One time premiums")
-ggsave("Plots/bootstrap_one_time_premiums.jpg", width = 10, height = 10, units = "cm")
+p <- ggplot(melt(one_time_premiums), aes(x=value)) + 
+    geom_histogram(binwidth = 10) + 
+    ggtitle("One time premiums") +
+    theme_minimal()
+ggsave("Plots/bootstrap_one_time_premiums.jpg",p, width = 10, height = 10, units = "cm")
 
 ```
