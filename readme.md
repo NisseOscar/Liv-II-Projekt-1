@@ -1,0 +1,2 @@
+# Project 1 in Non-Life insurance II
+This project is to model survivviability across a real dataset, decide a fair premium through regression analysis using the Cox-model. Further we seek to determine an actuarial fair premium and reserves by bootstrapping using monte-carlo and taken observed interest rates into consideration.

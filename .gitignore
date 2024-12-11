@@ -1,2 +1,5 @@
 *.csv
-plots/*.png
+*.png
+*.txt
+*.RData
+.vscode
